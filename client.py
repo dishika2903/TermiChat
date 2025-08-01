@@ -1,42 +1,63 @@
 import socket
 import threading
-from datetime import datetime
-from colorama import init, Fore
+from colorama import Fore, Style, init
 
 init(autoreset=True)
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(('127.0.0.1', 5000))
+HOST = 'localhost'
+PORT = 5000
 
-username = input("Enter your username: ").strip()
-client.send(username.encode())
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect((HOST, PORT))
+
+username = input("Enter your username: ")
+
+def format_message(message):
+    if any(keyword in message for keyword in ["has joined the chat", "has left the chat"]):
+        return Fore.YELLOW + Style.BRIGHT + message
+
+    try:
+        timestamp, content = message.split(" ", 1)
+        user, msg = content.split(":", 1)
+        if user.strip() == username:
+            return (Fore.WHITE + Style.DIM + timestamp + " " +
+                    Fore.GREEN + Style.BRIGHT + user.strip() + ":" +
+                    Fore.GREEN + msg)
+        else:
+            return (Fore.WHITE + Style.DIM + timestamp + " " +
+                    Fore.CYAN + user.strip() + ":" +
+                    Fore.CYAN + msg)
+    except:
+        return message  # fallback in case of parsing error
 
 def receive_messages():
     while True:
         try:
             message = client.recv(1024).decode()
-            if not message or message.lower() == "exit":
-                print(f"{Fore.YELLOW}[{datetime.now().strftime('%H:%M')}] Server disconnected.")
-                break
-            timestamp = datetime.now().strftime('%H:%M')
-            print(f"{Fore.MAGENTA}[{timestamp}] Server: {message}")
+            if message == 'USERNAME':
+                client.send(username.encode())
+            else:
+                print(format_message(message))
         except:
+            print(Fore.RED + Style.BRIGHT + "Disconnected from server.")
+            client.close()
             break
 
 def send_messages():
     while True:
-        message = input(f"{Fore.CYAN}{username}: ").strip()
-        if not message:
-            continue
-        client.send(message.encode())
-        if message.lower() == "exit":
+        message = input()
+        if message.lower() == '/exit':
+            client.close()
+            break
+        try:
+            client.send(message.encode())
+        except:
             break
 
-receive_thread = threading.Thread(target=receive_messages, daemon=True)
+print(f"Welcome, {username}! Type your message and press Enter to send. Type '/exit' to leave.\n")
+
+recv_thread = threading.Thread(target=receive_messages)
+recv_thread.start()
+
 send_thread = threading.Thread(target=send_messages)
-
-receive_thread.start()
 send_thread.start()
-
-send_thread.join()
-client.close()

@@ -1,61 +1,90 @@
 import socket
 import threading
 from datetime import datetime
-from colorama import init, Fore
+from colorama import init, Fore, Style
 
 init(autoreset=True)
 
-def log_message(sender, message):
-    with open("chatlog.txt", "a") as f:
-        f.write(f"[{datetime.now().strftime('%H:%M')}] {sender}: {message}\n")
+HOST = 'localhost'
+PORT = 5000
 
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_socket.bind(('127.0.0.1', 5000))
-server_socket.listen()
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen()
 
-print(f"{Fore.GREEN}🟢 Server started. Waiting for connection...")
+clients = []
+usernames = []
 
-client_socket, address = server_socket.accept()
-username = client_socket.recv(1024).decode()
-print(f"{Fore.MAGENTA}[{datetime.now().strftime('%H:%M')}] {username} connected from {address}")
+# Add chat started message once at startup
+def log_chat_start():
+    start_time = datetime.now().strftime("=======Chat started at %Y-%m-%d %H:%M:%S=======")
+    with open("chat_log.txt", "a") as file:
+        file.write(start_time + "\n")
+    print(Fore.CYAN + start_time)
 
-with open("chatlog.txt", "a") as f:
-    f.write(f"\n--- Chat started at {datetime.now().strftime('%H:%M')} with {username} ---\n")
+def broadcast(message, _client=None):
+    for client in clients:
+        if client != _client:
+            try:
+                client.send(message.encode())
+            except:
+                client.close()
 
-def receive_messages():
+def handle_client(client):
     while True:
         try:
-            message = client_socket.recv(1024).decode()
-            if not message or message.lower() == "exit":
-                print(f"{Fore.YELLOW}[{datetime.now().strftime('%H:%M')}] {username} disconnected.")
+            message = client.recv(1024).decode()
+            if message.lower() == "/exit":
+                remove_client(client)
                 break
-            timestamp = datetime.now().strftime('%H:%M')
-            print(f"{Fore.CYAN}[{timestamp}] {username}: {message}")
-            log_message(username, message)
+            timestamp = datetime.now().strftime("[%H:%M:%S]")
+            index = clients.index(client)
+            username = usernames[index]
+            full_message = f"{timestamp} {username}: {message}"
+            log_chat(full_message)
+            broadcast(full_message, client)
         except:
+            remove_client(client)
             break
 
-def send_messages():
+def receive_connections():
+    print(Fore.GREEN + f"Server started on {HOST}:{PORT}..." + Style.RESET_ALL)
+    log_chat_start()  # Call it once when server starts
     while True:
-        try:
-            message = input(f"{Fore.GREEN}Server: ").strip()
-            if not message:
-                continue
-            client_socket.send(message.encode())
-            log_message("Server", message)
-            if message.lower() == "exit":
-                print(f"{Fore.RED}🔌 Server ended the chat.")
-                break
-        except:
-            print(f"{Fore.RED}❌ Failed to send message.")
-            break
+        client, addr = server.accept()
+        print(Fore.YELLOW + f"New connection from {addr}" + Style.RESET_ALL)
+        client.send("USERNAME".encode())
+        username = client.recv(1024).decode()
+        usernames.append(username)
+        clients.append(client)
 
-recv_thread = threading.Thread(target=receive_messages, daemon=True)
-send_thread = threading.Thread(target=send_messages)
+        join_message = f"{username} has joined the chat."
+        log_chat(Fore.CYAN + join_message)
+        broadcast(join_message, client)
 
-recv_thread.start()
-send_thread.start()
+        thread = threading.Thread(target=handle_client, args=(client,))
+        thread.start()
 
-send_thread.join()
-client_socket.close()
-server_socket.close()
+def remove_client(client):
+    if client in clients:
+        index = clients.index(client)
+        username = usernames[index]
+        clients.remove(client)
+        usernames.remove(username)
+        client.close()
+        leave_message = f"{username} has left the chat."
+        log_chat(Fore.MAGENTA + leave_message)
+        broadcast(leave_message)
+
+def log_chat(message):
+    plain_text = Style.RESET_ALL.join(message.split(Style.RESET_ALL))  
+    with open("chat_log.txt", "a") as file:
+        file.write(strip_ansi(plain_text) + "\n")
+    print(message)
+
+def strip_ansi(text):
+    import re
+    ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+    return ansi_escape.sub('', text)
+
+receive_connections()
