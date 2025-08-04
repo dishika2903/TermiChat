@@ -1,5 +1,6 @@
 import socket
 import threading
+import os
 from colorama import Fore, Style, init
 
 init(autoreset=True)
@@ -49,6 +50,10 @@ def send_messages():
         if message.lower() == '/exit':
             client.close()
             break
+        elif message.lower() == '/clear':
+            # Clear terminal screen for this client
+            os.system('cls' if os.name == 'nt' else 'clear')
+            continue
         try:
             client.send(message.encode('utf-8'))
         except:
