@@ -28,14 +28,14 @@ def format_message(message):
                     Fore.CYAN + user.strip() + ":" +
                     Fore.CYAN + msg)
     except:
-        return message  # fallback in case of parsing error
+        return message
 
 def receive_messages():
     while True:
         try:
-            message = client.recv(1024).decode()
+            message = client.recv(2048).decode('utf-8', errors='ignore')
             if message == 'USERNAME':
-                client.send(username.encode())
+                client.send(username.encode('utf-8'))
             else:
                 print(format_message(message))
         except:
@@ -50,7 +50,7 @@ def send_messages():
             client.close()
             break
         try:
-            client.send(message.encode())
+            client.send(message.encode('utf-8'))
         except:
             break
 

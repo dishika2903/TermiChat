@@ -1,9 +1,6 @@
 import socket
 import threading
 from datetime import datetime
-from colorama import init, Fore, Style
-
-init(autoreset=True)
 
 HOST = 'localhost'
 PORT = 5000
@@ -15,76 +12,59 @@ server.listen()
 clients = []
 usernames = []
 
-# Add chat started message once at startup
-def log_chat_start():
-    start_time = datetime.now().strftime("=======Chat started at %Y-%m-%d %H:%M:%S=======")
-    with open("chat_log.txt", "a") as file:
-        file.write(start_time + "\n")
-    print(Fore.CYAN + start_time)
-
-def broadcast(message, _client=None):
+def broadcast(message):
     for client in clients:
-        if client != _client:
-            try:
-                client.send(message.encode())
-            except:
-                client.close()
+        try:
+            client.send(message.encode('utf-8'))
+        except:
+            pass
 
 def handle_client(client):
     while True:
         try:
-            message = client.recv(1024).decode()
-            if message.lower() == "/exit":
-                remove_client(client)
-                break
-            timestamp = datetime.now().strftime("[%H:%M:%S]")
-            index = clients.index(client)
-            username = usernames[index]
-            full_message = f"{timestamp} {username}: {message}"
-            log_chat(full_message)
-            broadcast(full_message, client)
+            message = client.recv(2048).decode('utf-8', errors='ignore')
+            if message:
+                timestamp = datetime.now().strftime("[%H:%M:%S]")
+                user_index = clients.index(client)
+                user = usernames[user_index]
+                formatted = f"{timestamp} {user}: {message}"
+                print(formatted)
+
+                with open("chat_log.txt", "a", encoding="utf-8") as f:
+                    f.write(formatted + "\n")
+
+                broadcast(formatted)
         except:
-            remove_client(client)
+            if client in clients:
+                index = clients.index(client)
+                user = usernames[index]
+                leave_msg = f"{user} has left the chat"
+                print(leave_msg)
+                broadcast(leave_msg)
+                clients.remove(client)
+                usernames.remove(user)
+                client.close()
             break
 
 def receive_connections():
-    print(Fore.GREEN + f"Server started on {HOST}:{PORT}..." + Style.RESET_ALL)
-    log_chat_start()  # Call it once when server starts
+    print("Server is running and listening...")
+    with open("chat_log.txt", "a", encoding="utf-8") as f:
+        f.write(f"\n--- Chat started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+
     while True:
         client, addr = server.accept()
-        print(Fore.YELLOW + f"New connection from {addr}" + Style.RESET_ALL)
-        client.send("USERNAME".encode())
-        username = client.recv(1024).decode()
+        print(f"Connected with {str(addr)}")
+
+        client.send('USERNAME'.encode('utf-8'))
+        username = client.recv(2048).decode('utf-8', errors='ignore')
         usernames.append(username)
         clients.append(client)
 
-        join_message = f"{username} has joined the chat."
-        log_chat(Fore.CYAN + join_message)
-        broadcast(join_message, client)
+        join_msg = f"{username} has joined the chat"
+        print(join_msg)
+        broadcast(join_msg)
 
         thread = threading.Thread(target=handle_client, args=(client,))
         thread.start()
-
-def remove_client(client):
-    if client in clients:
-        index = clients.index(client)
-        username = usernames[index]
-        clients.remove(client)
-        usernames.remove(username)
-        client.close()
-        leave_message = f"{username} has left the chat."
-        log_chat(Fore.MAGENTA + leave_message)
-        broadcast(leave_message)
-
-def log_chat(message):
-    plain_text = Style.RESET_ALL.join(message.split(Style.RESET_ALL))  
-    with open("chat_log.txt", "a") as file:
-        file.write(strip_ansi(plain_text) + "\n")
-    print(message)
-
-def strip_ansi(text):
-    import re
-    ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
-    return ansi_escape.sub('', text)
 
 receive_connections()
