@@ -17,6 +17,10 @@ def format_message(message):
     if any(keyword in message for keyword in ["has joined the chat", "has left the chat"]):
         return Fore.YELLOW + Style.BRIGHT + message
 
+    # Style private messages
+    if "[PRIVATE]" in message:
+        return Fore.MAGENTA + Style.BRIGHT + message
+
     try:
         timestamp, content = message.split(" ", 1)
         user, msg = content.split(":", 1)
@@ -51,7 +55,6 @@ def send_messages():
             client.close()
             break
         elif message.lower() == '/clear':
-            # Clear terminal screen for this client
             os.system('cls' if os.name == 'nt' else 'clear')
             continue
         try:
@@ -59,7 +62,8 @@ def send_messages():
         except:
             break
 
-print(f"Welcome, {username}! Type your message and press Enter to send. Type '/exit' to leave.\n")
+print(f"Welcome, {username}! Type your message and press Enter to send.")
+print("Type '/exit' to leave, '/clear' to clear screen, or '/w username message' to whisper.\n")
 
 recv_thread = threading.Thread(target=receive_messages)
 recv_thread.start()
